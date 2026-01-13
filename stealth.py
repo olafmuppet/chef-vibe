@@ -7,9 +7,11 @@ import urllib.parse
 st.set_page_config(page_title="Chef Vibe: Final", page_icon="🥂")
 st.title("🥂 Chef Vibe: Final Fix")
 
-# 1. Inputs
-api_key = st.text_input("Enter Gemini API Key:", type="password")
-
+# Look in the secret vault first, otherwise show the text box
+if "GEMINI_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_KEY"]
+else:
+    api_key = st.text_input("Enter Gemini API Key:", type="password")
 # Check if the URL was sent via the link (query params)
 query_params = st.query_params
 default_url = query_params.get("url", "")
