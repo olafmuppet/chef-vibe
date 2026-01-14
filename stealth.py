@@ -107,7 +107,7 @@ def get_stealth_transcript(url):
         return f"Download Error: {e}"
 
 # --- 5. APP LOGIC ---
-if st.button("Rip Recipe"):
+if st.button("Lets Do This! 🚀"):
     if not api_key or not video_url:
         st.error("Missing Info!")
     else:
@@ -138,9 +138,9 @@ if st.button("Rip Recipe"):
                     Write a clean, numbered list of steps. Do NOT use the word "Section".
                     
                     SECTION 3: INGREDIENTS
-                    List ingredients with SPECIFIC quantities or weights (estimate if not stated).
+                    List ingredients with SPECIFIC quantities or weights.
+                    Combine quantity and item (e.g., "1 lb Onion", not just "Onion").
                     Must be separated by the pipe symbol (|).
-                    Example: 200g Chicken | 1 tsp Salt | 2 cups Rice
                     
                     SEPARATOR:
                     Use "###SPLIT###" strictly between the three sections.
@@ -162,7 +162,7 @@ if st.button("Rip Recipe"):
 
                     # --- UI DISPLAY ---
                     
-                    # 1. METADATA (Clean Row)
+                    # 1. METADATA
                     if "|" in meta:
                         diff, time = meta.split("|", 1)
                     else:
@@ -180,28 +180,22 @@ if st.button("Rip Recipe"):
                     
                     st.divider()
                     
-                    # 3. SHOPPING LIST (Aligned Buttons)
+                    # 3. SHOPPING LIST (Mobile Optimized)
                     st.subheader("🛒 Shopping List")
                     
-                    # Clean up newlines or weird formatting from AI
                     clean_ingred = ingred.replace("\n", "|").split("|")
                     
                     for item in clean_ingred:
                         clean_item = item.strip()
-                        # Filter out empty strings or accidental headers
                         if clean_item and "Section" not in clean_item and "###" not in clean_item:
                             
-                            # Layout: Text takes 3 parts, Button takes 1 part
-                            col1, col2 = st.columns([3, 1])
+                            # Encode for URL
+                            query = urllib.parse.quote(clean_item)
+                            url = f"https://www.instacart.com/store/s?k={query}"
                             
-                            with col1:
-                                st.write(f"• **{clean_item}**")
-                            
-                            with col2:
-                                # Create Instacart Search Link
-                                query = urllib.parse.quote(clean_item)
-                                url = f"https://www.instacart.com/store/s?k={query}"
-                                st.link_button("Buy", url)
+                            # MOBILE FIX: Use Markdown link instead of columns
+                            # This prevents the button from wrapping strangely
+                            st.markdown(f"• **{clean_item}** — [**Buy ↗️**]({url})")
                             
             except Exception as e:
                 st.error(f"AI Error: {e}")
