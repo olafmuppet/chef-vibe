@@ -10,7 +10,57 @@ except ImportError:
     YouTubeTranscriptApi = None
 
 # --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Chef Vibe", page_icon="🥂")
+st.set_page_config(
+    page_title="Chef Vibe", 
+    page_icon="🥂",
+    layout="centered"
+)
+
+# --- CUSTOM CSS (The Aesthetics) ---
+st.markdown("""
+<style>
+    /* Import nice Google Font */
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+
+    html, body, [class*="css"]  {
+        font-family: 'Poppins', sans-serif;
+    }
+
+    /* Center the Main Title & Color it Chef Red */
+    .stApp h1 {
+        text-align: center;
+        color: #FF4B4B; 
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    
+    /* Style the 'Lets Do This' Button */
+    .stButton > button {
+        width: 100%;
+        background-color: #FF4B4B;
+        color: white;
+        border-radius: 12px;
+        padding: 15px 20px;
+        font-size: 18px;
+        font-weight: 600;
+        border: none;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background-color: #D43F3F;
+        transform: scale(1.02);
+        color: white;
+    }
+
+    /* Hide Streamlit Footer & Menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+</style>
+""", unsafe_allow_html=True)
 
 # Capture URL from iPhone Shortcut
 params = st.query_params
@@ -193,8 +243,7 @@ if st.button("Lets Do This! 🚀"):
                             query = urllib.parse.quote(clean_item)
                             url = f"https://www.instacart.com/store/s?k={query}"
                             
-                            # MOBILE FIX: Use Markdown link instead of columns
-                            # This prevents the button from wrapping strangely
+                            # MOBILE FIX: Use Markdown link to keep buy button inline
                             st.markdown(f"• **{clean_item}** — [**Buy ↗️**]({url})")
                             
             except Exception as e:
