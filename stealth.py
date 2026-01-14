@@ -174,9 +174,14 @@ if st.button("Lets Do This! 🚀"):
                 with st.spinner("Chef is writing the shopping list..."):
                     model = genai.GenerativeModel(valid_model_name)
                     
-                    # UPDATED PROMPT: Demands quantities and clean formatting
+                    # UPDATED PROMPT: "Estimated" Label added
                     prompt = f"""
                     You are a professional chef. Extract the recipe from this transcript.
+                    
+                    CRITICAL INSTRUCTION FOR INGREDIENTS:
+                    1. If the transcript does not state a quantity, you MUST ESTIMATE it based on standard cooking ratios.
+                    2. LABEL YOUR GUESSES: If you estimate a quantity, prefix it with "Estimated". (e.g., "Estimated 1 cup Heavy Cream").
+                    3. NEVER list "to taste" or "garnish" as a separate line item. Append it to the ingredient.
                     
                     OUTPUT FORMAT:
                     
@@ -188,8 +193,7 @@ if st.button("Lets Do This! 🚀"):
                     Write a clean, numbered list of steps. Do NOT use the word "Section".
                     
                     SECTION 3: INGREDIENTS
-                    List ingredients with SPECIFIC quantities or weights.
-                    Combine quantity and item (e.g., "1 lb Onion", not just "Onion").
+                    Format: Quantity + Item.
                     Must be separated by the pipe symbol (|).
                     
                     SEPARATOR:
@@ -239,6 +243,9 @@ if st.button("Lets Do This! 🚀"):
                         clean_item = item.strip()
                         if clean_item and "Section" not in clean_item and "###" not in clean_item:
                             
+                            if clean_item.lower() == "to taste":
+                                continue
+                                
                             # Encode for URL
                             query = urllib.parse.quote(clean_item)
                             url = f"https://www.instacart.com/store/s?k={query}"
