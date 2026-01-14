@@ -174,17 +174,16 @@ if st.button("Lets Do This! 🚀"):
                 with st.spinner("Chef is writing the shopping list..."):
                     model = genai.GenerativeModel(valid_model_name)
                     
-                    # UPDATED PROMPT: Strict Format Rules
+                    # UPDATED PROMPT: "Smart Estimate" Logic
                     prompt = f"""
                     You are a professional chef. Extract the recipe from this transcript.
                     
                     CRITICAL INSTRUCTION FOR INGREDIENTS:
-                    1. If the transcript does not state a quantity, you MUST ESTIMATE it based on standard cooking ratios.
-                    2. LABEL YOUR GUESSES: Prefix estimated amounts with "Estimated" (e.g., "Estimated 1 cup Heavy Cream").
-                    3. FORMAT RULE: You must always output the FULL string "Quantity + Ingredient Name". 
-                       - BAD: "12 oz"
-                       - GOOD: "12 oz Pasta"
-                    4. NEVER list "to taste" or "garnish" as a separate line item. Append it to the ingredient.
+                    1. ACCURACY FIRST: If the transcript explicitly mentions a quantity (e.g., "2 cups", "10 oz", "a handful"), USE IT exactly. Do NOT label it as "Estimated".
+                    2. GAPS ONLY: Only if the transcript is completely silent on quantity, you must estimate it based on cooking ratios.
+                    3. LABELING: If you had to guess the quantity (Rule #2), prefix it with "(Est.)". If it was in the video, do NOT add a prefix.
+                    4. FORMAT: Always use "Quantity + Ingredient Name" (e.g., "12 oz Pasta").
+                    5. CLEANUP: Never list "to taste" or "garnish" as a separate line.
                     
                     OUTPUT FORMAT:
                     
