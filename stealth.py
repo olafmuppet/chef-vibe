@@ -4,21 +4,26 @@ import requests
 from yt_dlp import YoutubeDL
 import urllib.parse
 
-st.set_page_config(page_title="Chef Vibe: Final", page_icon="🥂")
-st.title("🥂 Chef Vibe: Final Fix")
+# --- 1. SETUP PAGE & CAPTURE URL ---
+st.set_page_config(page_title="Chef Vibe", page_icon="🥂")
 
-# Look in the secret vault first, otherwise show the text box
+# The "Catcher's Mitt": Grabs the link sent from your iPhone
+params = st.query_params
+url_from_iphone = params.get("url", "")
+
+st.title("🥂 Chef Vibe")
+
+# --- 2. THE VAULT (API KEY) ---
 if "GEMINI_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_KEY"]
 else:
     api_key = st.text_input("Enter Gemini API Key:", type="password")
-# Check if the URL was sent via the link (query params)
-query_params = st.query_params
-default_url = query_params.get("url", "")
 
-# Pre-fill the box if a link was found
-video_url = st.text_input("Paste YouTube URL:", value=default_url)
+# --- 3. INPUT SECTION ---
+# This box now accepts any link and auto-fills from the Shortcut
+video_url = st.text_input("Paste Link (Instagram, TikTok, YouTube):", value=url_from_iphone)
 
+# --- 4. THE REST OF YOUR FUNCTIONS ---
 def get_valid_model():
     """Asks Google which model we are allowed to use."""
     try:
