@@ -3,6 +3,7 @@ import google.generativeai as genai
 import requests
 from yt_dlp import YoutubeDL
 import urllib.parse
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # --- 1. SETUP PAGE & CAPTURE URL ---
 st.set_page_config(page_title="Chef Vibe", page_icon="🥂")
@@ -36,59 +37,70 @@ def get_valid_model():
         return 'gemini-pro'
 
 def get_stealth_transcript(url):
-   # DISGUISE MODE: Pretend to be an iPhone 17 using Safari
-    # ATTEMPT 3: Force the internal iOS API client
-    # HYBRID FIX: Force iOS API but keep the User-Agent to prevent crashing
+    # STRATEGY 1: IF YOUTUBE, USE THE SPECIALIST
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            # Extract video ID from URL
+            if "v=" in url:
+                video_id = url.split("v=")[1].split("&")[0]
+            elif "youtu.be/" in url:
+                video_id = url.split("youtu.be/")[1].split("?")[0]
+            elif "shorts/" in url:
+                video_id = url.split("shorts/")[1].split("?")[0]
+            else:
+                return "Error: Could not find Video ID."
+
+            # Get the transcript
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            full_text = " ".join([t['text'] for t in transcript_list])
+            return full_text
+        except Exception as e:
+            return f"YouTube Error: {e} (Video might not have captions)"
+
+    # STRATEGY 2: IF TIKTOK, USE THE GENERALIST (yt-dlp)
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
-        # 1. Keep this so the code below doesn't crash
-        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-        # 2. Force the internal iOS API for Instagram
-        'extractor_args': {'instagram': {'imp': ['ios']}},
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/604.1',
     }
+    
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            # Try to grab manual subs first, then auto
             captions = info.get('subtitles') or info.get('automatic_captions')
             
-            if not captions: return "Error: No captions found."
+            if not captions: 
+                return "Error: No captions found for this video."
 
+            # Find English
             lang = 'en'
-            if 'en' not in captions:
-                for code in captions:
-                    if code.startswith('en'):
-                        lang = code
-                        break
-                else:
-                    lang = list(captions.keys())[0]
-
-            cap_formats = captions[lang]
-            json_url = None
-            for fmt in cap_formats:
-                if fmt['ext'] == 'json3':
-                    json_url = fmt['url']
+            for code in captions:
+                if code.startswith('en'):
+                    lang = code
                     break
-            if not json_url: json_url = cap_formats[0]['url']
+            else:
+                # If no English, take the first available
+                lang = list(captions.keys())[0]
 
+            # Parse the JSON caption data
+            cap_formats = captions[lang]
+            json_url = next((f['url'] for f in cap_formats if f['ext'] == 'json3'), cap_formats[0]['url'])
+            
             headers = {'User-Agent': ydl_opts['user_agent']}
             response = requests.get(json_url, headers=headers)
+            data = response.json()
             
-            try:
-                data = response.json()
-                events = data.get('events', [])
-                full_text = []
-                for event in events:
-                    segs = event.get('segs', [])
-                    for seg in segs:
-                        if seg.get('utf8'): full_text.append(seg['utf8'])
-                return " ".join(full_text)
-            except:
-                return response.text
+            full_text = []
+            for event in data.get('events', []):
+                for seg in event.get('segs', []):
+                    if seg.get('utf8'): full_text.append(seg['utf8'])
+            return " ".join(full_text)
+
     except Exception as e:
-        return f"Error: {e}"
+        return f"General Error: {e}"
 
 if st.button("Rip Recipe"):
     if not api_key or not video_url:
