@@ -38,12 +38,15 @@ def get_valid_model():
 def get_stealth_transcript(url):
    # DISGUISE MODE: Pretend to be an iPhone 17 using Safari
     # ATTEMPT 3: Force the internal iOS API client
+    # HYBRID FIX: Force iOS API but keep the User-Agent to prevent crashing
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
-        # This tells the downloader to use the internal mobile API, not the website
+        # 1. Keep this so the code below doesn't crash
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        # 2. Force the internal iOS API for Instagram
         'extractor_args': {'instagram': {'imp': ['ios']}},
     }
     try:
