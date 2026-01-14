@@ -36,12 +36,17 @@ def get_valid_model():
         return 'gemini-pro'
 
 def get_stealth_transcript(url):
+   # DISGUISE MODE: Pretend to be an iPhone 17 using Safari
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
-        'user_agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        'http_headers': {
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.instagram.com/',
+        }
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:

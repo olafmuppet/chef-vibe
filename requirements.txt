@@ -1,4 +1,4 @@
 streamlit
 google-generativeai
-yt-dlp
+yt-dlp>=2025.1.0
 requests
