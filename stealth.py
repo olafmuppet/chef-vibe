@@ -8,7 +8,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 # --- 1. SETUP PAGE & CAPTURE URL ---
 st.set_page_config(page_title="Chef Vibe", page_icon="🥂")
 
-# The "Catcher's Mitt": Grabs the link sent from your iPhone
+# The "Catcher": Grabs the link sent from your iPhone
 params = st.query_params
 url_from_iphone = params.get("url", "")
 
@@ -21,10 +21,8 @@ else:
     api_key = st.text_input("Enter Gemini API Key:", type="password")
 
 # --- 3. INPUT SECTION ---
-# This box now accepts any link and auto-fills from the Shortcut
-video_url = st.text_input("Paste Link (Instagram, TikTok, YouTube):", value=url_from_iphone)
+video_url = st.text_input("Paste Link (YouTube, Instagram, TikTok):", value=url_from_iphone)
 
-# --- 4. THE REST OF YOUR FUNCTIONS ---
 def get_valid_model():
     """Asks Google which model we are allowed to use."""
     try:
@@ -36,77 +34,86 @@ def get_valid_model():
     except:
         return 'gemini-pro'
 
+def extract_youtube_id(url):
+    """Pulls the unique ID from various YouTube link formats."""
+    if "youtu.be" in url:
+        return url.split("/")[-1].split("?")[0]
+    if "v=" in url:
+        return url.split("v=")[1].split("&")[0]
+    return None
+
 def get_stealth_transcript(url):
-    # STRATEGY 1: IF YOUTUBE, USE THE SPECIALIST
+    # STRATEGY A: If it's YouTube, use the official API (Fastest/Safest)
     if "youtube.com" in url or "youtu.be" in url:
         try:
-            # Extract video ID from URL
-            if "v=" in url:
-                video_id = url.split("v=")[1].split("&")[0]
-            elif "youtu.be/" in url:
-                video_id = url.split("youtu.be/")[1].split("?")[0]
-            elif "shorts/" in url:
-                video_id = url.split("shorts/")[1].split("?")[0]
-            else:
-                return "Error: Could not find Video ID."
-
-            # Get the transcript
+            video_id = extract_youtube_id(url)
+            if not video_id: return "Error: Could not find YouTube ID."
+            
+            # Fetch transcript using the native tool
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            full_text = " ".join([t['text'] for t in transcript_list])
+            
+            # Combine the text parts into one string
+            full_text = " ".join([entry['text'] for entry in transcript_list])
             return full_text
         except Exception as e:
             return f"YouTube Error: {e} (Video might not have captions)"
 
-    # STRATEGY 2: IF TIKTOK, USE THE GENERALIST (yt-dlp)
+    # STRATEGY B: For Instagram/TikTok, use the 'Disguise' (yt-dlp)
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
-        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/604.1',
+        # DISGUISE: Pretend to be an iPhone 17
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
     }
-    
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            # Try to grab manual subs first, then auto
             captions = info.get('subtitles') or info.get('automatic_captions')
             
-            if not captions: 
-                return "Error: No captions found for this video."
+            if not captions: return "Error: No captions found on this video."
 
-            # Find English
+            # Logic to find English captions
             lang = 'en'
-            for code in captions:
-                if code.startswith('en'):
-                    lang = code
-                    break
-            else:
-                # If no English, take the first available
-                lang = list(captions.keys())[0]
+            if 'en' not in captions:
+                for code in captions:
+                    if code.startswith('en'):
+                        lang = code
+                        break
+                else:
+                    lang = list(captions.keys())[0]
 
-            # Parse the JSON caption data
             cap_formats = captions[lang]
-            json_url = next((f['url'] for f in cap_formats if f['ext'] == 'json3'), cap_formats[0]['url'])
-            
+            json_url = None
+            for fmt in cap_formats:
+                if fmt['ext'] == 'json3':
+                    json_url = fmt['url']
+                    break
+            if not json_url: json_url = cap_formats[0]['url']
+
             headers = {'User-Agent': ydl_opts['user_agent']}
             response = requests.get(json_url, headers=headers)
-            data = response.json()
             
-            full_text = []
-            for event in data.get('events', []):
-                for seg in event.get('segs', []):
-                    if seg.get('utf8'): full_text.append(seg['utf8'])
-            return " ".join(full_text)
-
+            try:
+                data = response.json()
+                events = data.get('events', [])
+                full_text = []
+                for event in events:
+                    segs = event.get('segs', [])
+                    for seg in segs:
+                        if seg.get('utf8'): full_text.append(seg['utf8'])
+                return " ".join(full_text)
+            except:
+                return response.text
     except Exception as e:
-        return f"General Error: {e}"
+        return f"Download Error: {e}"
 
 if st.button("Rip Recipe"):
     if not api_key or not video_url:
         st.error("Missing Info!")
     else:
-        with st.spinner("Step 1: Downloading Transcript..."):
+        with st.spinner("Step 1: Hunting for captions..."):
             transcript_text = get_stealth_transcript(video_url)
 
         if "Error" in transcript_text:
@@ -116,10 +123,9 @@ if st.button("Rip Recipe"):
                 genai.configure(api_key=api_key)
                 valid_model_name = get_valid_model()
                 
-                with st.spinner(f"Step 2: AI Chef ({valid_model_name}) is grading & cooking..."):
+                with st.spinner(f"Step 2: Chef ({valid_model_name}) is cooking..."):
                     model = genai.GenerativeModel(valid_model_name)
                     
-                    # --- UPDATED PROMPT: Stronger formatting rules ---
                     prompt = f"""
                     You are a professional chef. Analyze this transcript.
                     
@@ -152,7 +158,6 @@ if st.button("Rip Recipe"):
                         instructions = parts[1].strip()
                         ingredients_raw = parts[2].strip()
                         
-                        # Split Difficulty and Time
                         if "|" in meta_info:
                             difficulty, est_time = meta_info.split("|", 1)
                         else:
@@ -188,7 +193,6 @@ if st.button("Rip Recipe"):
                     # SECTION 3: SHOPPING LIST
                     st.subheader("🛒 Shopping List")
                     
-                    # Force clean splitting even if AI uses newlines instead of pipes
                     clean_raw = ingredients_raw.replace("\n", "|")
                     items = clean_raw.split("|")
                     
