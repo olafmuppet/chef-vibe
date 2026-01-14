@@ -3,18 +3,21 @@ import google.generativeai as genai
 import requests
 from yt_dlp import YoutubeDL
 import urllib.parse
-from youtube_transcript_api import YouTubeTranscriptApi
+# We wrap the import to prevent crash if library is acting up
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+except ImportError:
+    YouTubeTranscriptApi = None
 
 # --- 1. SETUP PAGE & CAPTURE URL ---
 st.set_page_config(page_title="Chef Vibe", page_icon="🥂")
 
-# The "Catcher": Grabs the link sent from your iPhone
 params = st.query_params
 url_from_iphone = params.get("url", "")
 
 st.title("🥂 Chef Vibe")
 
-# --- 2. THE VAULT (API KEY) ---
+# --- 2. THE VAULT ---
 if "GEMINI_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_KEY"]
 else:
@@ -24,57 +27,51 @@ else:
 video_url = st.text_input("Paste Link (YouTube, Instagram, TikTok):", value=url_from_iphone)
 
 def get_valid_model():
-    """Asks Google which model we are allowed to use."""
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'gemini' in m.name:
-                    return m.name
+                if 'gemini' in m.name: return m.name
         return 'models/gemini-pro'
     except:
         return 'gemini-pro'
 
 def extract_youtube_id(url):
-    """Pulls the unique ID from various YouTube link formats."""
-    if "youtu.be" in url:
-        return url.split("/")[-1].split("?")[0]
-    if "v=" in url:
-        return url.split("v=")[1].split("&")[0]
+    if "youtu.be" in url: return url.split("/")[-1].split("?")[0]
+    if "v=" in url: return url.split("v=")[1].split("&")[0]
     return None
 
 def get_stealth_transcript(url):
-    # STRATEGY A: If it's YouTube, use the official API (Fastest/Safest)
-    if "youtube.com" in url or "youtu.be" in url:
+    transcript_text = None
+    
+    # --- STRATEGY A: YouTube Native API ---
+    if ("youtube.com" in url or "youtu.be" in url) and YouTubeTranscriptApi:
         try:
             video_id = extract_youtube_id(url)
-            if not video_id: return "Error: Could not find YouTube ID."
-            
-            # Fetch transcript using the native tool
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            
-            # Combine the text parts into one string
-            full_text = " ".join([entry['text'] for entry in transcript_list])
-            return full_text
-        except Exception as e:
-            return f"YouTube Error: {e} (Video might not have captions)"
+            if video_id:
+                # Try to get the official transcript
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+                transcript_text = " ".join([entry['text'] for entry in transcript_list])
+                return transcript_text # Success! Return immediately.
+        except Exception:
+            # If API fails, silently fall through to Strategy B (Safety Net)
+            pass
 
-    # STRATEGY B: For Instagram/TikTok, use the 'Disguise' (yt-dlp)
+    # --- STRATEGY B: The "Disguised" Downloader (Instagram/TikTok/Backup) ---
     ydl_opts = {
         'skip_download': True,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
-        # DISGUISE: Pretend to be an iPhone 17
         'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
     }
+    
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             captions = info.get('subtitles') or info.get('automatic_captions')
             
-            if not captions: return "Error: No captions found on this video."
+            if not captions: return "Error: No captions found."
 
-            # Logic to find English captions
             lang = 'en'
             if 'en' not in captions:
                 for code in captions:
@@ -113,7 +110,7 @@ if st.button("Rip Recipe"):
     if not api_key or not video_url:
         st.error("Missing Info!")
     else:
-        with st.spinner("Step 1: Hunting for captions..."):
+        with st.spinner("Hunting for captions..."):
             transcript_text = get_stealth_transcript(video_url)
 
         if "Error" in transcript_text:
@@ -123,88 +120,51 @@ if st.button("Rip Recipe"):
                 genai.configure(api_key=api_key)
                 valid_model_name = get_valid_model()
                 
-                with st.spinner(f"Step 2: Chef ({valid_model_name}) is cooking..."):
+                with st.spinner("Chef is cooking..."):
                     model = genai.GenerativeModel(valid_model_name)
-                    
                     prompt = f"""
                     You are a professional chef. Analyze this transcript.
                     
                     SECTION 1: SUMMARY
-                    Format exactly like this: "Difficulty Level | Estimated Time"
-                    Example: Medium | 45 Mins
+                    Format: "Difficulty Level | Estimated Time"
                     
                     SECTION 2: INSTRUCTIONS
-                    Create a concise, numbered step-by-step summary.
+                    Step-by-step summary.
                     
                     SECTION 3: INGREDIENTS
-                    List ingredients with ESTIMATED quantities if missing.
-                    IMPORTANT: You MUST separate every single ingredient with a vertical pipe symbol (|). Do NOT use newlines for the list.
-                    Example: 2 Eggs | 1 cup Flour | Salt
+                    List separated by | (pipe) symbols.
+                    Example: Eggs | Milk | Flour
                     
-                    FORMATTING RULE:
-                    Use "###SPLIT###" to separate the three sections.
+                    FORMATTING: Use "###SPLIT###" between sections.
                     
                     Transcript: {transcript_text[:15000]}
                     """
-                    
                     response = model.generate_content(prompt)
-                    
-                    # --- PARSING ---
                     full_text = response.text
                     parts = full_text.split("###SPLIT###")
                     
                     if len(parts) >= 3:
-                        meta_info = parts[0].strip() # Difficulty | Time
-                        instructions = parts[1].strip()
-                        ingredients_raw = parts[2].strip()
-                        
-                        if "|" in meta_info:
-                            difficulty, est_time = meta_info.split("|", 1)
-                        else:
-                            difficulty = meta_info
-                            est_time = "Unknown"
-                            
+                        meta = parts[0].strip()
+                        instr = parts[1].strip()
+                        ingred = parts[2].strip()
                     else:
-                        difficulty = "Unknown"
-                        est_time = ""
-                        instructions = "Could not parse."
-                        ingredients_raw = full_text
+                        meta = "Unknown"
+                        instr = full_text
+                        ingred = ""
+
+                    st.success("Done!")
+                    st.info(f"**Meta:** {meta}")
+                    st.subheader("📝 Instructions")
+                    st.write(instr)
+                    st.subheader("🛒 Shopping")
                     
-                    st.success("Recipe Ripped!")
-                    
-                    # SECTION 1: METADATA ROW
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if "Easy" in difficulty:
-                            st.info(f"**Level:** {difficulty} 🟢")
-                        elif "Medium" in difficulty:
-                            st.warning(f"**Level:** {difficulty} 🟡")
-                        else:
-                            st.error(f"**Level:** {difficulty} 🔴")
-                    with c2:
-                        st.success(f"**Time:** {est_time} ⏰")
-                    
-                    # SECTION 2: INSTRUCTIONS
-                    st.subheader("📝 Quick Guide")
-                    st.markdown(instructions)
-                    
-                    st.markdown("---")
-                    
-                    # SECTION 3: SHOPPING LIST
-                    st.subheader("🛒 Shopping List")
-                    
-                    clean_raw = ingredients_raw.replace("\n", "|")
-                    items = clean_raw.split("|")
-                    
-                    for i, item in enumerate(items):
-                        if item.strip() and "###" not in item:
-                            col1, col2 = st.columns([3, 1])
-                            with col1: 
-                                st.checkbox(item.strip(), key=f"chk_{i}")
+                    clean_ingred = ingred.replace("\n", "|").split("|")
+                    for item in clean_ingred:
+                        if item.strip():
+                            c1, c2 = st.columns([3,1])
+                            c1.write(f"- {item.strip()}")
+                            enc = urllib.parse.quote(item.strip())
+                            c2.link_button("Buy", f"https://www.instacart.com/store/s?k={enc}")
                             
-                            encoded_item = urllib.parse.quote(item.strip())
-                            instacart_url = f"https://www.instacart.com/store/s?k={encoded_item}"
-                            
-                            with col2: st.link_button("Buy ↗️", instacart_url)
             except Exception as e:
                 st.error(f"AI Error: {e}")
